@@ -14,23 +14,25 @@ class ops:
         else:
             expr_y = col_y_or_expr
 
-        cov_xy = pl.rolling_cov(expr_x, expr_y, window_size=window, ddof=1, min_samples=2) # ddof=1
+        cov_xy = pl.rolling_cov(expr_x, expr_y, window_size=window, ddof=1, min_samples=2)
         var_x = expr_x.rolling_var(window_size=window, ddof=1, min_samples=2)
 
-        # Must use the same var_x threshold
-        # When var_x is close to 0, beta = 0
         return pl.when(var_x < 1e-6).then(0.0).otherwise(cov_xy / var_x).alias("rolling_regbeta")
 
 
 def ops_rolling_regbeta(input_path: str, window: int = 20) -> np.ndarray:
     res = (
         pl.scan_parquet(input_path)
-        .with_columns([
+        .select([
+            pl.col("symbol"),
             pl.col("Close"),
             pl.col("Low")
         ])
-        .select(
+        .select([
+            pl.col("symbol"),
             ops.rolling_regbeta("Low", "Close", window).over("symbol")
-        )
-    ).collect()
+        ])
+        .select("rolling_regbeta")
+        .collect()
+    )
     return res.to_numpy()
